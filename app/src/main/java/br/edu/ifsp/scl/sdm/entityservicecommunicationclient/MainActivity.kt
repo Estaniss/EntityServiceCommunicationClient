@@ -13,6 +13,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import br.edu.ifsp.scl.sdm.entityservicecommunicationclient.databinding.ActivityMainBinding
+import br.edu.ifsp.scl.sdm.entityservicecommunication.IncrementBoundServiceInterface
 
 class MainActivity : AppCompatActivity() {
     private val amb: ActivityMainBinding by lazy {
@@ -20,30 +21,20 @@ class MainActivity : AppCompatActivity() {
     }
     private lateinit var incrementServiceIntent: Intent
     private var counter = 0
-    private lateinit var ibsMessenger:Messenger
+    private var ibService:IncrementBoundServiceInterface? =null
 
 
     private val incrementBoundServiceConnection = object :ServiceConnection{
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             Log.v(getString(R.string.app_name), "Client bound to the service")
             service?.also {
-                ibsMessenger = Messenger(service)
-                ibsMessenger.send(Message.obtain().apply {
-                    Messenger(object :Handler(Looper.myLooper()!!){
-                        override fun handleMessage(msg: Message) {
-                            super.handleMessage(msg)
-                            counter = msg.data.getInt("VALUE")
-                            Toast.makeText(this@MainActivity,"You clicked $counter times.", Toast.LENGTH_SHORT).show()
-                        }
-                    }).also {messenger ->
-                        replyTo=messenger
-                    }
-                })
+            ibService = IncrementBoundServiceInterface.Stub.asInterface(service)
             }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
             Log.v(getString(R.string.app_name), "Client unbound to the service")
+            ibService = null
         }
 
     }
@@ -71,9 +62,14 @@ class MainActivity : AppCompatActivity() {
                 setSupportActionBar(this)
             }
             incrementBt.setOnClickListener {
-            ibsMessenger.send(Message.obtain().apply {
-                data.putInt("VALUE",counter)
-            }  )
+            Thread {
+                ibService?.increment(counter)?.also {
+                    counter = it
+                    runOnUiThread {
+                        Toast.makeText(this@MainActivity,"You clicked $counter times", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }.start()
             }
         }
     }
